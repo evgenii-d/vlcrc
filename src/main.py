@@ -56,7 +56,7 @@ class VLCRemoteControl:
             result.extend(list(filter(None, item.split("\r\n"))))
         return list(dict.fromkeys(result))
 
-    def _send(self, command: str) -> Response:
+    def _send(self, command: str) -> "VLCRemoteControl.Response":
         """Send a command to VLC and receive the response.
 
         Args:
@@ -90,7 +90,7 @@ class VLCRemoteControl:
         result = self._filter_response(response_data)
         return VLCRemoteControl.Response(True, result)
 
-    def exec(self, command: str) -> Response:
+    def exec(self, command: str) -> "VLCRemoteControl.Response":
         """Execute given command 'as is'."""
         return self._send(command)
 
@@ -154,7 +154,7 @@ class VLCRemoteControl:
         response = self._send("clear")
         return response.success
 
-    def status(self) -> Response:
+    def status(self) -> "VLCRemoteControl.Response":
         """Get the current playlist status. """
         response = self._send("status")
         return response
