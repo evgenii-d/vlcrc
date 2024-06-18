@@ -49,16 +49,19 @@ print(status.data)
 ### Command-line
 
 ```txt
-usage: vlcrc [-h] [--host HOST] [--port PORT] [--timeout TIMEOUT] --command COMMAND
+usage: vlcrc [-h] [-a ADDRESS] [-p PORT] [-t TIMEOUT] -c COMMAND
 
 VLC Remote Control
 
 options:
-  -h, --help         show this help message and exit
-  --host HOST        Host [127.0.0.1]
-  --port PORT        Port to use [50000]
-  --timeout TIMEOUT  Socket connection timeout [0.1]
-  --command COMMAND  VLC RC command
+  -h, --help            show this help message and exit
+  -a ADDRESS, --address ADDRESS
+                        Address of the VLC server [127.0.0.1]
+  -p PORT, --port PORT  Port to use [50000]
+  -t TIMEOUT, --timeout TIMEOUT
+                        Socket connection timeout [0.1]
+  -c COMMAND, --command COMMAND
+                        The VLC Remote Control command to execute
 ```
 
 ## Remote control commands
