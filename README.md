@@ -65,7 +65,7 @@ options:
                         The VLC Remote Control command to execute
 ```
 
-## Remote control commands
+#### Remote control commands
 
 ```txt
 add XYZ  . . . . . . . . . . . . add XYZ to playlist
