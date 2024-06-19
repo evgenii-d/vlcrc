@@ -48,7 +48,8 @@ class VLCRemoteControl:
         data: list[str]
 
     def _filter_response(self, data: list[str]) -> list[str]:
-        """Split data by "\r\n", remove empty and duplicates. 
+        """
+            Split data by "\r\n", remove empty and duplicates. 
             Order preserved.
         """
         result = []
@@ -109,7 +110,7 @@ class VLCRemoteControl:
         """
         if not file.exists() or file.is_dir():
             raise FileNotFoundError
-        response = self._send(f"add {file.as_posix()}")
+        response = self._send(f"add {file.as_uri()}")
         return response.success
 
     def play(self) -> bool:
