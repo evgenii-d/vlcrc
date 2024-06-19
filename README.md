@@ -27,6 +27,7 @@ A Python script to control VLC media player via its [Remote Control interface][1
 ### Python module
 
 ```py
+from pathlib import Path
 from vlcrc import VLCRemoteControl
 
 # Initialize VLCRemoteControl
@@ -36,7 +37,7 @@ vlc = VLCRemoteControl('127.0.0.1', 50000)
 vlc.play()
 
 # Add a file to the playlist
-vlc.add('/path/to/file.mp3')
+vlc.add(Path("/path/to/file.mp3"))
 
 # Set the volume to 50
 vlc.set_volume(50)

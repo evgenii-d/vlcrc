@@ -9,7 +9,8 @@ from dataclasses import dataclass
 
 
 class ArgsNamespace(argparse.Namespace):
-    """A class to store parsed command-line arguments 
+    """ 
+        A class to store parsed command-line arguments 
         as attributes for easy access.
     """
     # pylint: disable=too-few-public-methods
