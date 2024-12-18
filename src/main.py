@@ -1,56 +1,51 @@
 """VLC Remote Control. """
 
 import re
-import sys
 import socket
-import argparse
 from pathlib import Path
 from dataclasses import dataclass
 
 
-class ArgsNamespace(argparse.Namespace):
-    """ 
-        A class to store parsed command-line arguments 
-        as attributes for easy access.
-    """
-    # pylint: disable=too-few-public-methods
-    address: str
-    port: int
-    timeout: float
-    command: str
+class UnknownCommand(Exception):
+    """Exception raised when passed unknown remote control command."""
+
+
+class PausedError(Exception):
+    """Exception raised when player is paused."""
+
+
+@dataclass
+class AudioDevice:
+    """System audio device."""
+    id: str
+    name: str
 
 
 class VLCRemoteControl:
     """Control VLC media player via Remote Control interface."""
 
-    def __init__(self, host: str, port: int, timeout: float = 0.1) -> None:
+    def __init__(self, host: str, port: int, timeout: float = 1) -> None:
         """Initialize VLCRemoteControl.
 
         Args:
             host (str): Hostname or IP address of the VLC instance.
             port (int): Port number of the VLC RC interface.
-            timeout (float, optional): 
-                Socket connection timeout in seconds. Defaults to 0.1.
+            timeout (float, optional):
+                Socket connection timeout in seconds. Defaults to 1.
         """
-        self.host = host
-        self.port = port
-        self.timeout = timeout
+        self._host = host
+        self._port = port
+        self._timeout = timeout
 
-    @dataclass
-    class AudioDevice:
-        """System audio device."""
-        id: str
-        name: str
-
-    @dataclass
-    class Response:
-        """VLC Remote Control interface response."""
-        success: bool
-        data: list[str]
+    _rc_commands: tuple[str] = (
+        "add", "playlist", "play", "stop", "next", "prev",
+        "goto", "repeat", "loop", "random", "clear", "status", "pause",
+        "volume", "adev", "quit"
+    )
 
     def _filter_response(self, data: list[str]) -> list[str]:
         """
-            Split data by "\r\n", remove empty and duplicates. 
+            Split data by "\r\n", remove empty and duplicates.
             Order preserved.
         """
         result = []
@@ -58,21 +53,57 @@ class VLCRemoteControl:
             result.extend(list(filter(None, item.split("\r\n"))))
         return list(dict.fromkeys(result))
 
-    def _send(self, command: str) -> "VLCRemoteControl.Response":
+    def _get_elements_between(
+            self,
+            elements: list[str],
+            start_element: str,
+            end_element: str
+    ) -> list[str]:
+        """Returns elements between start_element and end_element.
+
+        Args:
+            elements (list[str]): List to search through.
+            start_element (str): Element marking the start of range.
+            end_element (str): Element marking the end of range.
+
+        Returns:
+            list[str]: List of elements or an empty list if not found.
+        """
+        try:
+            start_index = elements.index(start_element) + 1
+            end_index = elements.index(end_element)
+            if start_index < end_index:
+                return elements[start_index:end_index]
+        except ValueError:
+            pass
+        return []
+
+    def _contain_true(self, elements: list[str]) -> bool:
+        for element in elements:
+            if "true" in element.lower():
+                return True
+        return False
+
+    def _send(self, command: str) -> list[str]:
         """Send a command to VLC and receive the response.
 
         Args:
             command (str): The VLC RC command to send.
 
         Returns:
-            Response: 
-                A Response object containing 
+            Response:
+                A Response object containing
                 the success status and response data.
         """
         response_data: list[str] = []
-        address = (self.host, self.port)
+        command_name = command.split()[0]
+        if command_name not in self._rc_commands:
+            raise UnknownCommand(f"Unknown command '{command_name}'")
+
         try:
-            with socket.create_connection(address, self.timeout) as rc_socket:
+            with socket.create_connection(
+                (self._host, self._port), self._timeout
+            ) as rc_socket:
                 rc_socket.sendall(str(command).encode() + b"\n")
                 rc_socket.shutdown(1)
                 while True:
@@ -81,29 +112,35 @@ class VLCRemoteControl:
                         break
                     response_data.append(response)
         except (TimeoutError, ConnectionRefusedError, socket.error) as error:
-            data = [f"VLC Remote Control is unavailable: {error}"]
-            return VLCRemoteControl.Response(False, data)
+            message = f"VLC Remote Control is unavailable: {error}"
+            raise ConnectionError(message) from error
 
-        for record in response_data:
-            if "unknown command" in record.lower():
-                data = [f"Unknown command `{command.split()[0]}`"]
-                return VLCRemoteControl.Response(False, data)
+        if command_name != "pause":
+            for i in response_data:
+                if "Type 'pause' to continue." in i:
+                    raise PausedError()
+        print(response_data)
+        return self._filter_response(response_data)
 
-        result = self._filter_response(response_data)
-        return VLCRemoteControl.Response(True, result)
+    def is_paused(self) -> bool:
+        """Check if player is paused.
 
-    def exec(self, command: str) -> "VLCRemoteControl.Response":
-        """Execute given command 'as is'."""
-        return self._send(command)
+        Returns:
+            bool: True if paused, False otherwise
+        """
+        response = self._send("status")
+        if "Type 'pause' to continue." in response:
+            return True
+        return False
 
-    def add(self, file: Path) -> bool:
+    def add(self, file: Path) -> None:
         """Add a file to the playlist.
 
         Args:
             file (Path): Path object representing the file to add.
 
         Raises:
-            FileNotFoundError: 
+            FileNotFoundError:
                 If the specified file does not exist or is a directory.
 
         Returns:
@@ -111,30 +148,48 @@ class VLCRemoteControl:
         """
         if not file.exists() or file.is_dir():
             raise FileNotFoundError
-        response = self._send(f"add {file.as_uri()}")
-        return response.success
+        self._send(f"add {file.as_uri()}")
 
-    def play(self) -> bool:
+    def playlist(self) -> list[str]:
+        """Return items currently in playlist.
+
+        Returns:
+            list[str]: items currently in playlist
+        """
+        result: list[str] = []
+        response = self._send("playlist")
+        playlist = self._get_elements_between(
+            response,
+            "|- Playlist",
+            "|- Media Library"
+        )
+
+        for i in playlist:
+            match = re.search(r"\|\s\s-\s(.+)\s\(.*", i)
+            try:
+                result.append(match.group(1))
+            except AttributeError:
+                pass
+
+        return result
+
+    def play(self) -> None:
         """Play the current stream."""
-        response = self._send("play")
-        return response.success
+        self._send("play")
 
-    def stop(self) -> bool:
+    def stop(self) -> None:
         """Stop the current stream."""
-        response = self._send("stop")
-        return response.success
+        self._send("stop")
 
-    def next(self) -> bool:
+    def next(self) -> None:
         """Go to the next item in the playlist."""
-        response = self._send("next")
-        return response.success
+        self._send("next")
 
-    def prev(self) -> bool:
+    def prev(self) -> None:
         """Go to the previous item in the playlist."""
-        response = self._send("prev")
-        return response.success
+        self._send("prev")
 
-    def goto(self, index: int) -> bool:
+    def goto(self, index: int) -> None:
         """Go to the specified playlist index.
 
         Args:
@@ -147,41 +202,57 @@ class VLCRemoteControl:
             bool: True if the command was successful, False otherwise.
         """
         if index <= 0:
-            raise ValueError("Index must be greater than zero")
-        response = self._send(f"goto {index}")
-        return response.success
+            raise ValueError("Index must be greater than 0")
+        self._send(f"goto {index}")
 
-    def clear(self) -> bool:
+    def repeat(self) -> bool:
+        """Toggle playlist item repeat."""
+        response = self._send("repeat")
+        return self._contain_true(response)
+
+    def loop(self) -> bool:
+        """Toggle playlist loop."""
+        response = self._send("loop")
+        return self._contain_true(response)
+
+    def random(self) -> bool:
+        """Toggle playlist random jumping."""
+        response = self._send("random")
+        return self._contain_true(response)
+
+    def clear(self) -> None:
         """Clear the playlist."""
-        response = self._send("clear")
-        return response.success
+        self._send("clear")
 
-    def status(self) -> "VLCRemoteControl.Response":
-        """Get the current playlist status. """
-        response = self._send("status")
-        return response
+    def status(self) -> list[str]:
+        """Get the current playlist status."""
+        return self._send("status")
 
-    def pause(self) -> bool:
-        """Toggle pause/play. """
-        response = self._send("pause")
-        return response.success
+    def pause(self):
+        """Toggle pause."""
+        self._send("pause")
+        try:
+            self._send("status")
+            return False
+        except PausedError:
+            return True
 
     def get_volume(self) -> int:
         """Get the current audio volume.
 
         Returns:
-            int: 
-                The current audio volume (0-320), 
+            int:
+                The current audio volume (0-320),
                 or -1 if the volume could not be retrieved.
         """
         response = self._send("volume")
-        for item in response.data:
+        for item in response:
             match = re.search(r"audio volume:\s*(\d+)", item)
             if match:
                 return int(match.group(1))
         return -1
 
-    def set_volume(self, value: int) -> bool:
+    def set_volume(self, value: int) -> None:
         """Set the audio volume.
 
         Args:
@@ -189,58 +260,33 @@ class VLCRemoteControl:
 
         Raises:
             ValueError: If the volume is outside the range of 0-320.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
+            RuntimeError: If failed to set audio volume.
         """
         if not 0 <= value <= 320:
             raise ValueError("Value must be between 0 and 320")
         response = self._send(f"volume {value}")
-        return response.success
+        for i in response:
+            if f"audio volume: {value}" in i.lower():
+                return
+        message = "Failed to set audio volume. Is the player paused?"
+        raise RuntimeError(message)
 
     def get_adev(self) -> list[AudioDevice]:
-        """Get a list of available audio devices"""
-        devices: list[VLCRemoteControl.AudioDevice] = []
+        """Get a list of available audio devices."""
+        devices: list[AudioDevice] = []
         response = self._send("adev")
-        for item in response.data:
+        for item in response:
             if item[:2] == "| ":
                 tmp = item[2:].split(" - ", 1)
-                device = VLCRemoteControl.AudioDevice(tmp[0], tmp[1])
+                device = AudioDevice(tmp[0], tmp[1])
                 if device.id:
                     devices.append(device)
         return devices
 
-    def set_adev(self, device_id: str) -> bool:
+    def set_adev(self, device_id: str) -> None:
         """Set the active audio device."""
-        response = self._send(f"adev {device_id}")
-        return response.success
+        self._send(f"adev {device_id}")
 
-    def quit(self) -> bool:
+    def quit(self) -> None:
         """Quit VLC."""
-        response = self._send("quit")
-        return response.success
-
-
-def parse_arguments() -> ArgsNamespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        prog="vlcrc", description="VLC Remote Control",
-        formatter_class=argparse.RawTextHelpFormatter)
-
-    parser.add_argument("-a", "--address", type=str, default="127.0.0.1",
-                        help="Address of the VLC server [127.0.0.1]")
-    parser.add_argument("-p", "--port", type=int, default=50000,
-                        help="Port to use [50000]")
-    parser.add_argument("-t", "--timeout", type=float, default=0.1,
-                        help="Socket connection timeout [0.1]")
-    parser.add_argument("-c", "--command", type=str, required=True,
-                        help="The VLC Remote Control command to execute")
-
-    return parser.parse_args(namespace=ArgsNamespace())
-
-
-if __name__ == "__main__":
-    args = parse_arguments()
-    vlc_rc = VLCRemoteControl(args.address, args.port, args.timeout)
-    vlc_response = vlc_rc.exec(args.command.lower())
-    sys.stdout.write("\n".join(vlc_response.data))
+        self._send("quit")
