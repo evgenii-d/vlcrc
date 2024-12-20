@@ -1,126 +1,138 @@
 # VLC Remote Control
 
-A Python script to control VLC media player via its [Remote Control interface][1].
+A Python library for controlling VLC media player
+via its [Remote Control interface][1].
+
+## Features
+
+- Control playback: play, pause, stop, next, previous.
+- Playlist management: add, view, clear, repeat, loop, random.
+- Volume control: get and set the volume.
+- Audio device management: get and set the active audio device.
+- Command Line Interface (CLI).
+
+## Requirements
+
+- Python 3.10+
+- VLC media player with Remote Control (RC) interface enabled.
+
+## Installation
+
+### 0. Install VLC media player
+
+Download the installer at <https://www.videolan.org/vlc/>
+
+### 1. Ensure the RC Interface is Enabled
+
+#### From the VLC UI
+
+1. Open VLC and navigate to `Tools` -> `Preferences` -> `Show settings: All`.
+2. Under `Interface` -> `Main Interfaces`, select `RC`.
+
+#### From the Command Line (Optional, but Recommended)
+
+| OS      | Command                                                  |
+|---------|----------------------------------------------------------|
+| Windows | `vlc --extraintf rc --rc-host=HOST:PORT`                 |
+| Linux   | `vlc --extraintf oldrc --rc-fake-tty --rc-host=HOST:PORT`|
+
+**Note:** Make sure the specified port (e.g., `PORT`) is open and accessible
+in your firewall to allow remote control connections.
+
+For more details, refer to the [VLC command-line help][2].
+
+### 2. Import the library
+
+```bash
+pip install vlcrc
+```
 
 ## Usage
 
-### Enable VLC Remote Control interface
-
-#### From the UI
-
-1. Open VLC media player.
-2. Go to Tools > Preferences (or press Ctrl+P).
-3. At the bottom left, under "Show settings", select "All".
-4. Navigate to Interface > Main interfaces.
-5. Check the box next to Remote control interface.
-6. Click Save.
-
-#### From the command line (optional, but recommended)
-
-|OS|Command|
-|-|-|
-|Windows|`vlc --extraintf rc --rc-host=HOST:PORT`|
-|Linux|`vlc --extraintf oldrc --rc-fake-tty --rc-host=HOST:PORT`|
-
-[VLC command-line help][2]
-
-### Python module
+### Python Library
 
 ```py
 from pathlib import Path
 from vlcrc import VLCRemoteControl
 
-# Initialize VLCRemoteControl
+# Create a VLCRemoteControl instance
 vlc = VLCRemoteControl('127.0.0.1', 50000)
 
-# Play the current item
+# Add a file to the playlist
+vlc.add(Path("/path/to/media/file.mp4"))
+
+# Play media
 vlc.play()
 
-# Add a file to the playlist
-vlc.add(Path("/path/to/file.mp3"))
+# Get the current playlist
+playlist = vlc.playlist()
+print(playlist)
 
-# Set the volume to 50
-vlc.set_volume(50)
+# Get and set volume
+current_volume = vlc.get_volume()
+print(current_volume)
+vlc.set_volume(100)
 
-# Get the current playlist status
-status = vlc.status()
-print(status.data)
+# Get audio devices and set an active one
+devices = vlc.get_adev()
+print(devices)
+vlc.set_adev(devices[0].id)
 ```
 
-### Command-line
+#### Available Commands
+
+| Command      | Description                                 |
+|--------------|---------------------------------------------|
+| `add`        | Add a file to the playlist.                 |
+| `playlist`   | Get the current playlist.                   |
+| `play`       | Play the current media.                     |
+| `stop`       | Stop playback.                              |
+| `next`       | Skip to the next media in the playlist.     |
+| `prev`       | Skip to the previous media.                 |
+| `goto`       | Go to a specific playlist index.            |
+| `repeat`     | Toggle playlist item repeat.                |
+| `loop`       | Toggle playlist loop.                       |
+| `random`     | Toggle playlist random jumping.             |
+| `clear`      | Clear the playlist.                         |
+| `status`     | Get the current status of the player.       |
+| `pause`      | Pause or resume playback.                   |
+| `get_volume` | Get the current audio volume.               |
+| `set_volume` | Set the audio volume (0-320).               |
+| `get_adev`   | Get a list of available audio devices.      |
+| `set_adev`   | Set the active audio device.                |
+| `quit`       | Quit VLC.                                   |
+
+### Command Line Interface (CLI)
 
 ```txt
-usage: vlcrc [-h] [-a ADDRESS] [-p PORT] [-t TIMEOUT] -c COMMAND
+usage: main.py [-h] host port {play,stop,next,prev,clear,status,pause,repeat,loop,random,playlist,quit,add,goto,volume,adev} ...
 
-VLC Remote Control
+Command Line Interface for VLC Remote Control
+
+positional arguments:
+  host                  VLC host address (e.g., 127.0.0.1, 192.168.1.100)
+  port                  VLC Remote Control interface port
+  {play,stop,next,prev,clear,status,pause,repeat,loop,random,playlist,quit,add,goto,volume,adev}
+                        Commands
+    play                play command
+    stop                stop command
+    next                next command
+    prev                prev command
+    clear               clear command
+    status              status command
+    pause               pause command
+    repeat              repeat command
+    loop                loop command
+    random              random command
+    playlist            playlist command
+    quit                quit command
+    add                 Add file to playlist
+    goto                Go to specific track
+    volume              Get/set volume
+    adev                Audio device control
 
 options:
   -h, --help            show this help message and exit
-  -a ADDRESS, --address ADDRESS
-                        Address of the VLC server [127.0.0.1]
-  -p PORT, --port PORT  Port to use [50000]
-  -t TIMEOUT, --timeout TIMEOUT
-                        Socket connection timeout [0.1]
-  -c COMMAND, --command COMMAND
-                        The VLC Remote Control command to execute
-```
-
-#### Remote control commands
-
-```txt
-add XYZ  . . . . . . . . . . . . add XYZ to playlist
-enqueue XYZ  . . . . . . . . . queue XYZ to playlist
-playlist . . . . .  show items currently in playlist
-play . . . . . . . . . . . . . . . . . . play stream
-stop . . . . . . . . . . . . . . . . . . stop stream
-next . . . . . . . . . . . . . .  next playlist item
-prev . . . . . . . . . . . .  previous playlist item
-goto . . . . . . . . . . . . . .  goto item at index
-repeat [on|off] . . . .  toggle playlist item repeat
-loop [on|off] . . . . . . . . . toggle playlist loop
-random [on|off] . . . . . . .  toggle random jumping
-clear . . . . . . . . . . . . . . clear the playlist
-status . . . . . . . . . . . current playlist status
-title [X]  . . . . . . set/get title in current item
-title_n  . . . . . . . .  next title in current item
-title_p  . . . . . .  previous title in current item
-chapter [X]  . . . . set/get chapter in current item
-chapter_n  . . . . . .  next chapter in current item
-chapter_p  . . . .  previous chapter in current item
-
-seek X . . . seek in seconds, for instance `seek 12'
-pause  . . . . . . . . . . . . . . . .  toggle pause
-fastforward  . . . . . . . .  .  set to maximum rate
-rewind  . . . . . . . . . . . .  set to minimum rate
-faster . . . . . . . . . .  faster playing of stream
-slower . . . . . . . . . .  slower playing of stream
-normal . . . . . . . . . .  normal playing of stream
-frame. . . . . . . . . .  play frame by frame
-f [on|off] . . . . . . . . . . . . toggle fullscreen
-info . . . . .  information about the current stream
-stats  . . . . . . . .  show statistical information
-get_time  . seconds elapsed since stream's beginning
-is_playing . . . .  1 if a stream plays, 0 otherwise
-get_title . . . . .  the title of the current stream
-get_length . . . .  the length of the current stream
-
-volume [X] . . . . . . . . . .  set/get audio volume
-volup [X]  . . . . . . .  raise audio volume X steps
-voldown [X]  . . . . . .  lower audio volume X steps
-adev [device]  . . . . . . . .  set/get audio device
-achan [X]. . . . . . . . . .  set/get audio channels
-atrack [X] . . . . . . . . . . . set/get audio track
-vtrack [X] . . . . . . . . . . . set/get video track
-vratio [X]  . . . . . . . set/get video aspect ratio
-vcrop [X]  . . . . . . . . . . .  set/get video crop
-vzoom [X]  . . . . . . . . . . .  set/get video zoom
-snapshot . . . . . . . . . . . . take video snapshot
-strack [X] . . . . . . . . .  set/get subtitle track
-key [hotkey name] . . . . . .  simulate hotkey press
-
-help . . . . . . . . . . . . . . . this help message
-logout . . . . . . .  exit (if in socket connection)
-quit . . . . . . . . . . . . . . . . . . .  quit vlc
 ```
 
 [1]:https://wiki.videolan.org/Documentation:Modules/rc
