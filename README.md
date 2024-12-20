@@ -1,7 +1,7 @@
 # VLC Remote Control
 
-A Python library for remotely controlling a VLC media player using
-the VLC [Remote Control interface][1].
+A Python library for remote control of VLC media player
+via its [Remote Control interface][1].
 
 ## Features
 
@@ -9,6 +9,7 @@ the VLC [Remote Control interface][1].
 - Playlist management: add, view, clear, repeat, loop, random.
 - Volume control: get and set the volume.
 - Audio device management: get and set the active audio device.
+- Command Line Interface (CLI).
 
 ## Requirements
 
@@ -42,7 +43,13 @@ For more details, refer to the [VLC command-line help][2].
 
 ### 2. Import the library
 
+```bash
+pip install vlcrc
+```
+
 ## Usage
+
+### Python Library
 
 ```py
 from pathlib import Path
@@ -72,7 +79,7 @@ print(devices)
 vlc.set_adev(devices[0].id)
 ```
 
-## Available Commands
+#### Available Commands
 
 | Command      | Description                                 |
 |--------------|---------------------------------------------|
@@ -94,6 +101,39 @@ vlc.set_adev(devices[0].id)
 | `get_adev`   | Get a list of available audio devices.      |
 | `set_adev`   | Set the active audio device.                |
 | `quit`       | Quit VLC.                                   |
+
+### Command Line Interface (CLI)
+
+```txt
+usage: main.py [-h] host port {play,stop,next,prev,clear,status,pause,repeat,loop,random,playlist,quit,add,goto,volume,adev} ...
+
+Command Line Interface for VLC Remote Control
+
+positional arguments:
+  host                  VLC host address (e.g., 127.0.0.1, 192.168.1.100)
+  port                  VLC Remote Control interface port
+  {play,stop,next,prev,clear,status,pause,repeat,loop,random,playlist,quit,add,goto,volume,adev}
+                        Commands
+    play                play command
+    stop                stop command
+    next                next command
+    prev                prev command
+    clear               clear command
+    status              status command
+    pause               pause command
+    repeat              repeat command
+    loop                loop command
+    random              random command
+    playlist            playlist command
+    quit                quit command
+    add                 Add file to playlist
+    goto                Go to specific track
+    volume              Get/set volume
+    adev                Audio device control
+
+options:
+  -h, --help            show this help message and exit
+```
 
 [1]:https://wiki.videolan.org/Documentation:Modules/rc
 [2]:https://wiki.videolan.org/VLC_command-line_help

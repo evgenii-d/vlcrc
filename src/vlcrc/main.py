@@ -1,7 +1,10 @@
-"""VLC Remote Control. """
+"""VLC Remote Control."""
 
 import re
+import sys
 import socket
+import argparse
+from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -9,9 +12,15 @@ from dataclasses import dataclass
 class UnknownRemoteCommand(Exception):
     """Exception raised for unknown remote control commands."""
 
+    def __init__(self, message="Unknown remote control command"):
+        super().__init__(message)
+
 
 class PausedPlayerError(Exception):
     """Exception raised when player is paused."""
+
+    def __init__(self, message="Player is paused. Cannot proceed"):
+        super().__init__(message)
 
 
 @dataclass
@@ -19,6 +28,18 @@ class AudioDevice:
     """System audio device."""
     id: str
     name: str
+
+
+# @dataclass
+class CommandLineArgs(argparse.Namespace):
+    """Command-line arguments for VLCRemoteControl."""
+    host: str
+    port: int
+    command: Optional[str]
+    file: Optional[Path]
+    index: Optional[int]
+    level: Optional[int]
+    device_id: Optional[str]
 
 
 class VLCRemoteControl:
@@ -37,7 +58,7 @@ class VLCRemoteControl:
         self._port = port
         self._timeout = timeout
 
-    _rc_commands: tuple[str] = (
+    _supported_commands: tuple[str] = (
         "add", "playlist", "play", "stop", "next", "prev",
         "goto", "repeat", "loop", "random", "clear", "status", "pause",
         "volume", "adev", "quit"
@@ -86,7 +107,7 @@ class VLCRemoteControl:
             elements (list[str]): List of strings to search through.
 
         Returns:
-            bool: 
+            bool:
                 True if 'true' is found in any element,
                 otherwise False. (case-insensitive)
         """
@@ -111,7 +132,7 @@ class VLCRemoteControl:
         """
         response_data: list[str] = []
         command_name = command.split()[0]
-        if command_name not in self._rc_commands:
+        if command_name not in self._supported_commands:
             raise UnknownRemoteCommand(f"Unknown command '{command_name}'")
 
         try:
@@ -126,7 +147,7 @@ class VLCRemoteControl:
                         break
                     response_data.append(response)
         except (TimeoutError, ConnectionRefusedError, socket.error) as error:
-            message = f"VLC Remote Control is unavailable: {error}"
+            message = f"VLC Remote Control is unavailable [{error}]"
             raise ConnectionError(message) from error
 
         if command_name != "pause":
@@ -160,7 +181,7 @@ class VLCRemoteControl:
             bool: True if the command was successful, False otherwise.
         """
         if not file.exists() or file.is_dir():
-            raise FileNotFoundError
+            raise FileNotFoundError(f"File '{file}' not found")
         self._send_command(f"add {file.as_uri()}")
 
     def playlist(self) -> list[str]:
@@ -277,12 +298,7 @@ class VLCRemoteControl:
         """
         if not 0 <= value <= 320:
             raise ValueError("Value must be between 0 and 320")
-        response = self._send_command(f"volume {value}")
-        for i in response:
-            if f"audio volume: {value}" in i.lower():
-                return
-        message = "Failed to set audio volume. Is the player paused?"
-        raise RuntimeError(message)
+        self._send_command(f"volume {value}")
 
     def get_adev(self) -> list[AudioDevice]:
         """Get a list of available audio devices."""
@@ -303,3 +319,127 @@ class VLCRemoteControl:
     def quit(self) -> None:
         """Quit VLC."""
         self._send_command("quit")
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create and configure the argument parser.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser
+    """
+    parser = argparse.ArgumentParser(
+        description="Command Line Interface for VLC Remote Control",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "host", help="VLC host address (e.g., 127.0.0.1, 192.168.1.100)")
+    parser.add_argument(
+        "port", type=int, help="VLC Remote Control interface port")
+
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Simple commands without arguments
+    for cmd in ["play", "stop", "next", "prev", "clear", "status", "pause",
+                "repeat", "loop", "random", "playlist", "quit"]:
+        subparsers.add_parser(cmd, help=f"{cmd} command")
+
+    # Add file to playlist
+    add_parser = subparsers.add_parser("add", help="Add file to playlist")
+    add_parser.add_argument("file", type=Path, help="File path")
+
+    # Goto specific track
+    goto_parser = subparsers.add_parser("goto", help="Go to specific track")
+    goto_parser.add_argument("index", type=int,
+                             help="Track index (starts at 1)")
+
+    # Volume control
+    volume_parser = subparsers.add_parser("volume", help="Get/set volume")
+    volume_parser.add_argument("level", type=int, nargs="?",
+                               help="Volume level (0-320)")
+
+    # Audio device control
+    adev_parser = subparsers.add_parser("adev", help="Audio device control")
+    adev_parser.add_argument("device_id", nargs="?",
+                             help="Device ID to set as active")
+
+    return parser
+
+
+def handle_command(vlc: VLCRemoteControl, args: CommandLineArgs) -> None:
+    """Execute the VLC command based on parsed arguments.
+
+    Args:
+        vlc: VLCRemoteControl instance
+        args: Parsed command line arguments
+
+    Raises:
+        SystemExit: On command execution error
+    """
+    match args.command:
+        # Simple commands without arguments
+        case "play" | "stop" | "next" | "prev" | "clear" | "pause" | "quit":
+            getattr(vlc, args.command)()
+
+        # Toggle commands that return boolean
+        case "repeat" | "loop" | "random":
+            result = getattr(vlc, args.command)()
+            sys.stdout.write(f"{args.command}: {'on' if result else 'off'}")
+
+        # Status command
+        case "status":
+            for line in vlc.status():
+                sys.stdout.write(line+"\n")
+
+        # Playlist command
+        case "playlist":
+            for i, item in enumerate(vlc.playlist(), 1):
+                sys.stdout.write(f"{i}. {item}\n")
+
+        # Add file command
+        case "add":
+            vlc.add(args.file)
+
+        # Goto command
+        case "goto":
+            vlc.goto(args.index)
+
+        # Volume command
+        case "volume":
+            if args.level is None:
+                sys.stdout.write(f"Current volume: {vlc.get_volume()}")
+            else:
+                vlc.set_volume(args.level)
+
+        # Audio device command
+        case "adev":
+            if args.device_id is None:
+                devices = vlc.get_adev()
+                for device in devices:
+                    sys.stdout.write(f"{device.id} - {device.name}\n")
+            else:
+                vlc.set_adev(args.device_id)
+
+        case _:
+            sys.exit(f"Error: Unknown command '{args.command}'")
+
+
+def main() -> None:
+    """Entry point for the VLC remote control CLI."""
+    parser = create_parser()
+    args = parser.parse_args(namespace=CommandLineArgs())
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    try:
+        vlc = VLCRemoteControl(args.host, args.port)
+        handle_command(vlc, args)
+    except (FileNotFoundError, ValueError, UnknownRemoteCommand,
+            ConnectionError, PausedPlayerError) as e:
+        sys.exit(f"Error: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
