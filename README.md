@@ -1,6 +1,6 @@
 # VLC Remote Control
 
-A Python library for remote control of VLC media player
+A Python library for controlling VLC media player
 via its [Remote Control interface][1].
 
 ## Features
